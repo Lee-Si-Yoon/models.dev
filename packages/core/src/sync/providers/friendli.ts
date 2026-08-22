@@ -313,8 +313,13 @@ function translateReasoningOptions(
 
 function translateInterleaved(
   value: FriendliModel["interleaved"],
+  existing: SyncedFullModel["interleaved"] | undefined,
 ): SyncedFullModel["interleaved"] {
-  if (value === undefined || value === false) return undefined;
+  if (value === undefined) return existing;
+  // The API sometimes reports interleaved: false for models that other hosts
+  // (DeepInfra, Chutes) confirm still expose reasoning_content — trust an
+  // existing authored value over a false the API may report inconsistently.
+  if (value === false) return existing;
   if (value === true) return true;
   return { field: value };
 }
@@ -366,7 +371,7 @@ function buildFriendliModel(
   };
   const reasoning = model.reasoning === true;
   const reasoningOptions = reasoning ? translateReasoningOptions(model.reasoning_options) : undefined;
-  const interleaved = translateInterleaved(model.interleaved);
+  const interleaved = translateInterleaved(model.interleaved, existing?.interleaved);
   const structuredOutput = model.functionality.structured_output;
   const cost = buildCost(model, existing?.cost);
   const releaseDate = existing?.release_date ?? dateFromTimestamp(model.created);

@@ -1,3 +1,8 @@
+# Toggle: chat_template_kwargs.enable_thinking = true | false
+# https://friendli.ai/docs/guides/reasoning
+# Effort: $.reasoning_effort = "high" | "max" — confirmed for this model only
+# (GLM-5.2), not the GLM family generally (GLM-5.1 documents toggle only).
+# https://friendli.ai/docs/examples/models/zai-glm-5-2/control-reasoning
 base_model = "zhipuai/glm-5.2"
 
 [interleaved]
