@@ -130,11 +130,12 @@ function resolveBaseModelID(baseModel: string | undefined): string | undefined {
 }
 
 // Resolve a Friendli entry to its catalog lab metadata id.
-// 1) explicit alias (handles HF id → catalog slug mismatches)
-// 2) slug lookup against the models tree
-// 3) HF-URL scan against the lab [[weights]] table as a last resort
+// 1) API-declared base_model (handles HF id → catalog slug mismatches)
+// 2) self-referential fallback: some entries (e.g. deepseek-ai/DeepSeek-V3.2)
+//    omit base_model entirely even though a matching lab metadata file
+//    exists under the mapped lab prefix — resolve against the model's own id.
 function resolveLabModelSync(model: FriendliModel): string | undefined {
-  return resolveBaseModelID(model.base_model);
+  return resolveBaseModelID(model.base_model) ?? resolveBaseModelID(model.id);
 }
 
 function lookupLabFile(baseModel: string): string | undefined {
@@ -195,14 +196,23 @@ export const friendli = {
     return FriendliResponse.parse(raw).data;
   },
   translateModel(model: FriendliModel, context) {
-    if (isDeprecated(model)) return undefined;
+    const existing = context.existing(model.id);
+    // Mirror the deepinfra pattern: a brand-new deprecated model is skipped
+    // outright (nothing to author), but a model we already track keeps its
+    // file and gets marked `status = "deprecated"` instead of silently
+    // falling out of translateModel — that left it retained via
+    // deleteMissing but stuck live in the catalog with no lifecycle marker.
+    if (isDeprecated(model) && existing === undefined) return undefined;
+    const built = buildFriendliModel(
+      model,
+      existing,
+      resolveLabModelSync(model),
+      isDeprecated(model),
+    );
     return {
       id: model.id,
-      model: buildFriendliModel(
-        model,
-        context.existing(model.id),
-        resolveLabModelSync(model),
-      ),
+      model: built,
+      header: toggleHeader(built),
     };
   },
   sourceID(model: FriendliModel) {
@@ -220,16 +230,20 @@ export const friendli = {
       `${paths.length} local model(s) retained after being removed from the Friendli API: ${paths.join(", ")}`,
     ];
   },
-  newFileHeader(model, content) {
-    // Toggle is the only documented reasoning control on Friendli
-    // (chat_template_kwargs.enable_thinking = true | false). Any toggle-bearing
-    // file written by the sync gets a leading wire-path comment so the
-    // rationale is not lost when there is no existing header.
-    if (model.reasoning !== true) return undefined;
-    if (!/^\[\[reasoning_options\]\]\n.*type = "toggle"/m.test(content)) return undefined;
-    return "# Toggle: chat_template_kwargs.enable_thinking = true | false\n# https://friendli.ai/docs/guides/reasoning\n";
-  },
 } satisfies SyncProvider<FriendliModel>;
+
+// Toggle is the only documented reasoning control on Friendli
+// (chat_template_kwargs.enable_thinking = true | false). Any toggle-bearing
+// file written by the sync gets a leading wire-path comment so the rationale
+// is not lost when the file has no header of its own; the runner's default
+// only carries over a header that already exists on disk.
+const TOGGLE_HEADER = "# Toggle: chat_template_kwargs.enable_thinking = true | false\n# https://friendli.ai/docs/guides/reasoning\n";
+
+function toggleHeader(model: SyncedModel): string | undefined {
+  return model.reasoning_options?.some((option) => option.type === "toggle")
+    ? TOGGLE_HEADER
+    : undefined;
+}
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf";
 
@@ -328,7 +342,11 @@ function buildFriendliModel(
   model: FriendliModel,
   existing: ExistingModel | undefined,
   factorBase: string | undefined,
+  deprecated: boolean,
 ): SyncedModel {
+  // Mirror deepinfra/pioneer: mark deprecated, never clear a status the
+  // provider file already carries for other reasons (e.g. hand-authored beta).
+  const status = deprecated ? "deprecated" as const : existing?.status;
   // factorBase is pre-resolved by translateModel: looks up the lab metadata
   // file by slug first, then by matching the API hugging_face_url against
   // the lab's [[weights]] table (handles slug mismatches like
@@ -368,6 +386,7 @@ function buildFriendliModel(
         limit,
         modalities: apiInput !== undefined || apiOutput !== undefined ? { input: apiInput ?? [], output: apiOutput ?? [] } : undefined,
         cost,
+        status,
       },
       limit,
       existing?.base_model === factorBase ? existing.base_model_omit : undefined,
@@ -408,6 +427,6 @@ function buildFriendliModel(
     cost,
     limit: { context: model.context_length, output: model.max_completion_tokens },
     modalities: { input: apiInput ?? ["text"], output: apiOutput ?? ["text"] },
-    status: existing?.status,
+    status,
   };
 }
