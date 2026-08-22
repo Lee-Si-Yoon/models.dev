@@ -316,9 +316,11 @@ function translateInterleaved(
   existing: SyncedFullModel["interleaved"] | undefined,
 ): SyncedFullModel["interleaved"] {
   if (value === undefined) return existing;
-  // The API sometimes reports interleaved: false for models that other hosts
-  // (DeepInfra, Chutes) confirm still expose reasoning_content — trust an
-  // existing authored value over a false the API may report inconsistently.
+  // Verified live 2026-08-22: a chat completion against deepseek-ai/DeepSeek-V3.2
+  // with enable_thinking=true returns both `reasoning` and `reasoning_content` in
+  // the response, despite the /v1/models entry reporting interleaved: false. The
+  // models endpoint is stale/wrong for this field — trust an existing authored
+  // value over an API false.
   if (value === false) return existing;
   if (value === true) return true;
   return { field: value };
