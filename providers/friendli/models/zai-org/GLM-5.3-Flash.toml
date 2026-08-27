@@ -8,7 +8,7 @@ values = ["low", "high", "max"]
 field = "reasoning_content"
 
 [modalities]
-input = ["text", "image"]
+input = ["text", "image", "video"]
 output = ["text"]
 
 [cost]
