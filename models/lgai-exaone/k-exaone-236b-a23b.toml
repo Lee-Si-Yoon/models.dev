@@ -1,9 +1,8 @@
-# Context: official Hugging Face config max_position_embeddings = 262_144.
-# Output: LG AI Research's official model README uses max_new_tokens=16,384
-# in both reasoning and non-reasoning quickstarts; use that lab-grounded
-# documented generation setting rather than a host-specific fallback.
+# Context and output hard ceiling: official Hugging Face config
+# max_position_embeddings = 262_144. The lab does not publish a lower hard
+# maximum-generation ceiling; do not misrepresent the README's example
+# max_new_tokens value as one.
 # https://huggingface.co/LGAI-EXAONE/K-EXAONE-236B-A23B/raw/main/config.json
-# https://huggingface.co/LGAI-EXAONE/K-EXAONE-236B-A23B
 name = "K-EXAONE-236B-A23B"
 description = "Open multilingual MoE model for reasoning, agentic tool use, and long-context work with strong Korean capabilities"
 release_date = "2026-03-18"
@@ -17,7 +16,7 @@ open_weights = true
 
 [limit]
 context = 262_144
-output = 16_384
+output = 262_144
 
 [modalities]
 input = ["text"]
