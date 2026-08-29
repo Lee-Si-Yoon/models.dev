@@ -1,7 +1,6 @@
 # Toggle: chat_template_kwargs.enable_thinking = true | false
 # https://friendli.ai/docs/guides/reasoning
 base_model = "deepseek/deepseek-v3.2"
-description = "DeepSeek chat model for instruction following, coding, and analysis"
 
 [interleaved]
 field = "reasoning_content"
@@ -11,8 +10,6 @@ type = "toggle"
 
 [[reasoning_options]]
 type = "budget_tokens"
-min = -1
-max = 163_840
 
 [cost]
 input = 0.5

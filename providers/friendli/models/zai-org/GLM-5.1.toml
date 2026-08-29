@@ -10,8 +10,6 @@ type = "toggle"
 
 [[reasoning_options]]
 type = "budget_tokens"
-min = -1
-max = 202_752
 
 [cost]
 input = 1.4

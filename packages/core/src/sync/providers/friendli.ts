@@ -312,10 +312,11 @@ function buildCost(
 // budget_tokens IS a real reasoning-budget control on Friendli, confirmed by
 // the live /v1/models response and the OpenAPI chat-completions docs
 // (reasoning_budget is a documented request field, min = -1 means unlimited).
-// Passed through as-is except min is normalized to -1 (unlimited) to match
-// the hand-authored GLM-5.x convention, since the API's own min is always -1
-// for every model observed so far and a stray non-(-1) min would silently
-// misstate "unlimited" as a real floor.
+// The control itself is real (verified with live requests across GLM-5.3,
+// gemma-4-31B-it, and DeepSeek-V3.2), but the catalog's min/max values are
+// not safe published range constraints: GLM-5.3 accepted
+// reasoning_budget=1_048_577 despite reporting max=1_048_576. Preserve the
+// capability without publishing unverified bounds.
 function translateReasoningOptions(
   api: FriendliModel["reasoning_options"],
 ): SyncedFullModel["reasoning_options"] {
@@ -324,7 +325,7 @@ function translateReasoningOptions(
   for (const option of api) {
     if (option === undefined) continue;
     if (option.type === "budget_tokens") {
-      options.push({ type: "budget_tokens", min: -1, max: option.max });
+      options.push({ type: "budget_tokens" });
       continue;
     }
     options.push(option as NonNullable<SyncedFullModel["reasoning_options"]>[number]);
@@ -423,7 +424,11 @@ function buildFriendliModel(
         reasoning_options: reasoningOptions,
         interleaved,
         structured_output: structuredOutput,
-        description: model.description,
+        // A factored entry inherits the lab description. Friendli's catalog
+        // description is host metadata, not a new model identity, and its
+        // generic text can be weaker than the lab's canonical description.
+        // Keep it only for full-inline entries below.
+        description: undefined,
         limit,
         modalities: apiInput !== undefined || apiOutput !== undefined ? { input: apiInput ?? [], output: apiOutput ?? [] } : undefined,
         cost,
