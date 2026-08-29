@@ -1,10 +1,9 @@
 # Context: official Hugging Face config max_position_embeddings = 262_144.
-# The lab's official config/README does not state a lower maximum-generation
-# ceiling; use Friendli's live /serverless/v1/models max_completion_tokens
-# (262_144, accessed 2026-08-29) as the documented fallback per provider
-# policy instead of retaining the prior uncited 32,768 value.
+# Output: LG AI Research's official model README uses max_new_tokens=16,384
+# in both reasoning and non-reasoning quickstarts; use that lab-grounded
+# documented generation setting rather than a host-specific fallback.
 # https://huggingface.co/LGAI-EXAONE/K-EXAONE-236B-A23B/raw/main/config.json
-# https://api.friendli.ai/serverless/v1/models
+# https://huggingface.co/LGAI-EXAONE/K-EXAONE-236B-A23B
 name = "K-EXAONE-236B-A23B"
 description = "Open multilingual MoE model for reasoning, agentic tool use, and long-context work with strong Korean capabilities"
 release_date = "2026-03-18"
@@ -18,7 +17,7 @@ open_weights = true
 
 [limit]
 context = 262_144
-output = 262_144
+output = 16_384
 
 [modalities]
 input = ["text"]
