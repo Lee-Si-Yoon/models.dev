@@ -1,3 +1,9 @@
+# Friendli live catalog (GET /serverless/v1/models, accessed 2026-08-29)
+# reports input_modalities=[text,image,video] and omits pdf. Verified the
+# host-side omission with a live POST /chat/completions request: a minimal
+# application/pdf data URL supplied through image_url returned HTTP 422
+# "Failed to load media". Keep this real host delta rather than inheriting
+# the lab's pdf modality.
 base_model = "zhipuai/glm-5.3-flash"
 
 [interleaved]

@@ -395,6 +395,16 @@ function buildFriendliModel(
   // omit the override so lab metadata (e.g. gemma vision) is inherited.
   const apiInput = model.input_modalities !== undefined ? translateModalities(model.input_modalities) : undefined;
   const apiOutput = model.output_modalities !== undefined ? translateModalities(model.output_modalities) : undefined;
+  // For a factored provider entry, only write the modality sides Friendli
+  // actually supplied. Plain-object inheritance deep-merges, so an omitted
+  // side must remain omitted to preserve the lab's canonical modality list
+  // rather than replacing it with an empty array.
+  const modalities = apiInput !== undefined || apiOutput !== undefined
+    ? {
+      ...(apiInput !== undefined ? { input: apiInput } : {}),
+      ...(apiOutput !== undefined ? { output: apiOutput } : {}),
+    }
+    : undefined;
   // undefined when the API omits input_modalities so factorBaseModel
   // inherits the lab attachment; only override when explicitly provided.
   const attachment = apiInput !== undefined ? apiInput.some((value) => value !== "text") : undefined;
@@ -437,7 +447,7 @@ function buildFriendliModel(
         // Keep it only for full-inline entries below.
         description: undefined,
         limit,
-        modalities: apiInput !== undefined || apiOutput !== undefined ? { input: apiInput ?? [], output: apiOutput ?? [] } : undefined,
+        modalities,
         cost,
         status,
       },
