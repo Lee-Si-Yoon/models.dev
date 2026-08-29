@@ -6,6 +6,11 @@ description = "DeepSeek chat model for instruction following, coding, and analys
 [[reasoning_options]]
 type = "toggle"
 
+[[reasoning_options]]
+type = "budget_tokens"
+min = -1
+max = 163_840
+
 [cost]
 input = 0.5
 output = 1.5

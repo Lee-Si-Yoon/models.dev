@@ -1,0 +1,25 @@
+base_model = "zhipuai/glm-5.3-flash"
+
+[interleaved]
+field = "reasoning_content"
+
+[[reasoning_options]]
+type = "effort"
+values = ["low", "high", "max"]
+
+[[reasoning_options]]
+type = "budget_tokens"
+min = -1
+max = 1_048_576
+
+[cost]
+input = 0.15
+output = 0.5
+cache_read = 0.03
+
+[limit]
+context = 1_048_576
+output = 1_048_576
+
+[modalities]
+input = ["text", "image", "video"]

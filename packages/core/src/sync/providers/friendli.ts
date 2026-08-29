@@ -16,9 +16,11 @@ const PER_TOKEN_TO_PER_MILLION = 1_000_000;
 
 const InterleavedField = z.enum(["reasoning_content", "reasoning_details"]);
 
-// Raw API reasoning_options shape — stripped of budget_tokens (the API derives
-// max from max_completion_tokens, which is not a real reasoning budget control
-// on this host; provider.toml documents only enable_thinking as a toggle).
+// Raw API reasoning_options shape, including budget_tokens (a real
+// reasoning-budget control on Friendli: min = -1 means unlimited, max
+// corresponds to max_completion_tokens). Confirmed via the live
+// /v1/models response and https://friendli.ai/docs/openapi/model-apis/chat-completions
+// (reasoning_budget is a documented request field).
 const FriendliReasoningOption = z
   .discriminatedUnion("type", [
     z.object({ type: z.literal("toggle") }).passthrough(),
@@ -293,11 +295,13 @@ function buildCost(
 }
 
 // Translate API reasoning_options into host-accurate catalog options.
-// budget_tokens IS a real reasoning-budget control on Friendli (min = -1 means
-// unlimited; max corresponds to max_completion_tokens). However, the catalog's
-// AGENTS.md reasoning-options rule currently forbids budget_tokens except for a
-// narrow native case, so authored TOMLs strip it pending an AGENTS.md rule
-// update (see the PR description). toggle and effort are passed through.
+// budget_tokens IS a real reasoning-budget control on Friendli, confirmed by
+// the live /v1/models response and the OpenAPI chat-completions docs
+// (reasoning_budget is a documented request field, min = -1 means unlimited).
+// Passed through as-is except min is normalized to -1 (unlimited) to match
+// the hand-authored GLM-5.x convention, since the API's own min is always -1
+// for every model observed so far and a stray non-(-1) min would silently
+// misstate "unlimited" as a real floor.
 function translateReasoningOptions(
   api: FriendliModel["reasoning_options"],
 ): SyncedFullModel["reasoning_options"] {
@@ -305,7 +309,10 @@ function translateReasoningOptions(
   const options: NonNullable<SyncedFullModel["reasoning_options"]> = [];
   for (const option of api) {
     if (option === undefined) continue;
-    if (option.type === "budget_tokens") continue;
+    if (option.type === "budget_tokens") {
+      options.push({ type: "budget_tokens", min: -1, max: option.max });
+      continue;
+    }
     options.push(option as NonNullable<SyncedFullModel["reasoning_options"]>[number]);
   }
   return options.length > 0 ? options : [];
