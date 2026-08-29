@@ -16,6 +16,20 @@ const PER_TOKEN_TO_PER_MILLION = 1_000_000;
 
 const InterleavedField = z.enum(["reasoning_content", "reasoning_details"]);
 
+// Friendli's /v1/models `interleaved` flag is unreliable for some models: it
+// reports `false` for deepseek-ai/DeepSeek-V3.2 even though a live
+// POST /chat/completions request (chat_template_kwargs.enable_thinking=true,
+// accessed 2026-08-29) returns both `reasoning` and `reasoning_content` in
+// the response. Relying on `existing?.interleaved` to carry this forward is
+// fragile — if the on-disk file ever loses the field for any reason, the
+// live verification is silently forgotten on the next sync with no trace.
+// This map is the durable source of truth for models where a live request
+// has verified a real field the catalog API misreports; translateInterleaved
+// consults it before falling back to the existing on-disk value.
+const VERIFIED_INTERLEAVED_OVERRIDES: Record<string, SyncedFullModel["interleaved"]> = {
+  "deepseek-ai/DeepSeek-V3.2": { field: "reasoning_content" },
+};
+
 // Raw API reasoning_options shape, including budget_tokens (a real
 // reasoning-budget control on Friendli: min = -1 means unlimited, max
 // corresponds to max_completion_tokens). Confirmed via the live
@@ -319,9 +333,12 @@ function translateReasoningOptions(
 }
 
 function translateInterleaved(
+  modelID: string,
   value: FriendliModel["interleaved"],
   existing: SyncedFullModel["interleaved"] | undefined,
 ): SyncedFullModel["interleaved"] {
+  const verified = VERIFIED_INTERLEAVED_OVERRIDES[modelID];
+  if (verified !== undefined) return verified;
   if (value === undefined) return existing;
   // Verified live 2026-08-22: a chat completion against deepseek-ai/DeepSeek-V3.2
   // with enable_thinking=true returns both `reasoning` and `reasoning_content` in
@@ -380,7 +397,7 @@ function buildFriendliModel(
   };
   const reasoning = model.reasoning === true;
   const reasoningOptions = reasoning ? translateReasoningOptions(model.reasoning_options) : undefined;
-  const interleaved = translateInterleaved(model.interleaved, existing?.interleaved);
+  const interleaved = translateInterleaved(model.id, model.interleaved, existing?.interleaved);
   const structuredOutput = model.functionality.structured_output;
   const cost = buildCost(model, existing?.cost);
   const releaseDate = existing?.release_date ?? dateFromTimestamp(model.created);
