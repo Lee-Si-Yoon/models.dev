@@ -471,7 +471,10 @@ function buildFriendliModel(
         tool_call: model.functionality.tool_call,
         structured_output: structuredOutput,
         open_weights: Boolean(model.hugging_face_url),
-        modalities: apiInput !== undefined || apiOutput !== undefined ? { input: apiInput ?? [], output: apiOutput ?? [] } : undefined,
+        // Full-inline entries have no lab modalities to inherit. Default only
+        // sides omitted by the API to text rather than constructing empty
+        // arrays, which would advertise an impossible no-output/no-input model.
+        modalities: { input: apiInput ?? ["text"], output: apiOutput ?? ["text"] },
       }),
     family: existing?.family ?? inferFamily(model.id, name),
     // Full-inline has no lab to inherit from; default text-only when the
