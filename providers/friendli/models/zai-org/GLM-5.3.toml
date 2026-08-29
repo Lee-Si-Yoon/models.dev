@@ -1,12 +1,23 @@
-name = "GLM-5.3"
-# Friendli documents only $.chat_template_kwargs.enable_thinking = true | false
-# for this model, not the configured effort values "low", "high", and "max".
-# https://friendli.ai/docs/guides/reasoning (accessed 2026-08-29)
+# Friendli's chat-completions endpoint documents reasoning_effort (generic
+# enum) and reasoning_budget (integer token cap) as real request fields; GLM-5.3
+# on Z.AI's own API always reasons and only exposes low|high|max, so we mirror
+# those graded levels here instead of Friendli's full generic effort enum.
+# budget_tokens max/limit come from live GET /serverless/v1/models
+# (max_completion_tokens=1_048_576, context_length=1_048_576), which is
+# larger than the lab file's rounded 1_000_000 figure.
+# https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-effort-one-of-0
+# https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-budget-one-of-0
+# (accessed 2026-08-29)
 base_model = "zhipuai/glm-5.3"
 
 [[reasoning_options]]
 type = "effort"
 values = ["low", "high", "max"]
+
+[[reasoning_options]]
+type = "budget_tokens"
+min = -1
+max = 1_048_576
 
 [interleaved]
 field = "reasoning_content"
@@ -15,3 +26,8 @@ field = "reasoning_content"
 input = 1.4
 output = 4.4
 cache_read = 0.26
+
+[limit]
+context = 1_048_576
+output = 1_048_576
+
