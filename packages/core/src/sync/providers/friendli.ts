@@ -376,9 +376,16 @@ function buildFriendliModel(
   factorBase: string | undefined,
   deprecated: boolean,
 ): SyncedModel {
-  // Mirror deepinfra/pioneer: mark deprecated, never clear a status the
-  // provider file already carries for other reasons (e.g. hand-authored beta).
-  const status = deprecated ? "deprecated" as const : existing?.status;
+  // Mirror deepinfra/pioneer lifecycle behavior: mark a live-catalog model
+  // deprecated when its deprecation_date has passed, but do not let a retained
+  // deleteMissing:false file stay permanently deprecated if it later returns
+  // to the catalog active again. Preserve other hand-authored lifecycle
+  // statuses (e.g. beta) unchanged.
+  const status = deprecated
+    ? "deprecated" as const
+    : existing?.status === "deprecated"
+      ? undefined
+      : existing?.status;
   // factorBase is pre-resolved by translateModel: looks up the lab metadata
   // file by slug first, then by matching the API hugging_face_url against
   // the lab's [[weights]] table (handles slug mismatches like
