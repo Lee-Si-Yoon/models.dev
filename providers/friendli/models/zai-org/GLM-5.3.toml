@@ -1,0 +1,17 @@
+name = "GLM-5.3"
+# Friendli documents only $.chat_template_kwargs.enable_thinking = true | false
+# for this model, not the configured effort values "low", "high", and "max".
+# https://friendli.ai/docs/guides/reasoning (accessed 2026-08-29)
+base_model = "zhipuai/glm-5.3"
+
+[[reasoning_options]]
+type = "effort"
+values = ["low", "high", "max"]
+
+[interleaved]
+field = "reasoning_content"
+
+[cost]
+input = 1.4
+output = 4.4
+cache_read = 0.26
