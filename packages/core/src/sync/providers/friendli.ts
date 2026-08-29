@@ -390,10 +390,20 @@ function buildFriendliModel(
   // undefined when the API omits input_modalities so factorBaseModel
   // inherits the lab attachment; only override when explicitly provided.
   const attachment = apiInput !== undefined ? apiInput.some((value) => value !== "text") : undefined;
+  // Completion-length cap: when a base_model exists, defer to the lab's own
+  // limit.output instead of forcing Friendli's max_completion_tokens onto
+  // it. Friendli's max_completion_tokens equals context_length for several
+  // models (GLM-5.2/5.3/5.3-Flash, gemma-4-31B-it, both EXAONE entries,
+  // DeepSeek-V3.2) and blindly asserting that as the completion cap
+  // overwrites lab-verified, genuinely tighter completion limits (e.g.
+  // DeepSeek-V3.2's lab file documents output=64_000 out of a 128_000
+  // context, not "same as context"). Only fall back to Friendli's own
+  // reported value when there is no base_model to inherit a real
+  // completion-cap policy from (full-inline entries).
   const limit = {
     context: model.context_length,
     input: existing?.limit?.input,
-    output: model.max_completion_tokens,
+    output: factorBase !== undefined ? undefined : model.max_completion_tokens,
   };
   const reasoning = model.reasoning === true;
   const reasoningOptions = reasoning ? translateReasoningOptions(model.reasoning_options) : undefined;

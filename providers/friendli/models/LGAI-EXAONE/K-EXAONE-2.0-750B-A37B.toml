@@ -17,6 +17,3 @@ max = 262_144
 input = 0.6
 output = 2.4
 cache_read = 0.12
-
-[limit]
-output = 262_144
