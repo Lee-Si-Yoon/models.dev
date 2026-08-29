@@ -3,6 +3,8 @@
 # Effort: $.reasoning_effort = "high" | "max" — confirmed for this model only
 # (GLM-5.2), not the GLM family generally (GLM-5.1 documents toggle only).
 # https://friendli.ai/docs/examples/models/zai-glm-5-2/control-reasoning
+# Budget: reasoning_budget = positive integer reasoning-token cap (-1 = unlimited)
+# https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-budget-one-of-0
 base_model = "zhipuai/glm-5.2"
 
 [interleaved]

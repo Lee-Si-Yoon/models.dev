@@ -1,5 +1,11 @@
 # Toggle: chat_template_kwargs.enable_thinking = true | false
 # https://friendli.ai/docs/guides/reasoning
+#
+# Host completion cap (not a lab fact): this Friendli route reports
+# max_completion_tokens = 262,144 in its serving catalog, so it is recorded
+# here rather than inheriting the lab entry, which deliberately omits an
+# output ceiling (LG publishes none). Verified live (accessed 2026-08-29):
+# https://api.friendli.ai/serverless/v1/models
 base_model = "lgai-exaone/k-exaone-236b-a23b"
 status = "deprecated"
 
@@ -13,3 +19,7 @@ type = "toggle"
 input = 0.2
 output = 0.8
 cache_read = 0.1
+
+[limit]
+context = 262_144
+output = 262_144

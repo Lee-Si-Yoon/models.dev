@@ -9,6 +9,8 @@
 # modalities override is authored here on purpose: the inherited lab
 # modalities (google/gemma-4-31b-it: text+image input) are correct for this
 # host, so overriding would only duplicate identical data.
+# Budget: reasoning_budget = positive integer reasoning-token cap (-1 = unlimited)
+# https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-budget-one-of-0
 base_model = "google/gemma-4-31b-it"
 
 [interleaved]

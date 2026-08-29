@@ -76,6 +76,12 @@ export const FriendliModel = z
         completion: z.union([z.string(), z.number()]).optional(),
         input_cache_read: z.union([z.string(), z.number()]).optional(),
         input_cache_write: z.union([z.string(), z.number()]).optional(),
+        // The pre-SyncProvider generator validated this field
+        // (z.enum(["TOKEN", "SECOND"])) and authored cost only for TOKEN
+        // pricing. The current catalog omits it, but Friendli has served
+        // SECOND-priced entries before — passthrough would silently x1,000,000
+        // a per-second rate into the catalog's USD/MTok cost.
+        unit_type: z.enum(["TOKEN", "SECOND"]).optional(),
       })
       .passthrough(),
     description: z.string().optional(),
@@ -219,16 +225,25 @@ export const friendli = {
     // falling out of translateModel — that left it retained via
     // deleteMissing but stuck live in the catalog with no lifecycle marker.
     if (isDeprecated(model) && existing === undefined) return undefined;
+    const factorBase = resolveLabModelSync(model);
+    // Friendli is a multi-lab relay, so a brand-new remote model with no
+    // provider-agnostic lab metadata to factor onto must not be authored
+    // full-inline by an hourly sync (AGENTS.md: full inline is reserved for
+    // first-party labs or true host-unique aliases). Mirror the deepinfra
+    // create gate: already-tracked files keep updating; unresolvable new
+    // IDs are skipped with a notice until lab metadata exists or a true
+    // host-unique alias is hand-authored.
+    if (existing === undefined && factorBase === undefined) return undefined;
     const built = buildFriendliModel(
       model,
       existing,
-      resolveLabModelSync(model),
+      factorBase,
       isDeprecated(model),
     );
     return {
       id: model.id,
       model: built,
-      header: toggleHeader(built),
+      header: reasoningHeader(built),
     };
   },
   sourceID(model: FriendliModel) {
@@ -237,7 +252,7 @@ export const friendli = {
   skippedNotice(ids: string[]) {
     if (ids.length === 0) return [];
     return [
-      `${ids.length} deprecated model(s) skipped (deprecation_date passed): ${ids.join(", ")}`,
+      `${ids.length} remote model(s) skipped: no provider-agnostic lab metadata to factor onto (full-inline creates are not authored for a multi-lab relay — add models/<lab>/<model>.toml, then re-sync) or deprecation_date passed before the model was ever tracked: ${ids.join(", ")}`,
     ];
   },
   missingNotice(paths: string[]) {
@@ -248,17 +263,45 @@ export const friendli = {
   },
 } satisfies SyncProvider<FriendliModel>;
 
-// Toggle is the only documented reasoning control on Friendli
-// (chat_template_kwargs.enable_thinking = true | false). Any toggle-bearing
-// file written by the sync gets a leading wire-path comment so the rationale
-// is not lost when the file has no header of its own; the runner's default
-// only carries over a header that already exists on disk.
-const TOGGLE_HEADER = "# Toggle: chat_template_kwargs.enable_thinking = true | false\n# https://friendli.ai/docs/guides/reasoning\n";
+// Leading wire-path comments for every reasoning control type this host
+// authors on a file, matching the wire paths documented in
+// providers/friendli/provider.toml. AGENTS.md requires a leading comment
+// per authored control (toggle, effort, budget) — a toggle-only header
+// loses the rationale for budget-only files such as MiniMax-M2.5. A
+// hand-authored header on an existing file always wins over this default
+// (the runner only falls back to translated.header for newly created files).
+const REASONING_GUIDE_URL = "https://friendli.ai/docs/guides/reasoning";
+const EFFORT_DOC_URL =
+  "https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-effort-one-of-0";
+const BUDGET_DOC_URL =
+  "https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-budget-one-of-0";
 
-function toggleHeader(model: SyncedModel): string | undefined {
-  return model.reasoning_options?.some((option) => option.type === "toggle")
-    ? TOGGLE_HEADER
-    : undefined;
+function reasoningHeader(model: SyncedModel): string | undefined {
+  const options = model.reasoning_options;
+  if (options === undefined || options.length === 0) return undefined;
+  const lines: string[] = [];
+  for (const option of options) {
+    if (option.type === "toggle") {
+      lines.push("# Toggle: chat_template_kwargs.enable_thinking = true | false");
+      lines.push(`# ${REASONING_GUIDE_URL}`);
+    }
+    if (option.type === "effort") {
+      if (option.values.length > 0) {
+        const values = option.values.map((value) => `"${value}"`).join(" | ");
+        lines.push(`# Effort: reasoning_effort = ${values}`);
+      } else {
+        lines.push("# Effort: reasoning_effort (model-specific accepted values)");
+      }
+      lines.push(`# ${EFFORT_DOC_URL}`);
+    }
+    if (option.type === "budget_tokens") {
+      lines.push(
+        "# Budget: reasoning_budget = positive integer reasoning-token cap (-1 = unlimited)",
+      );
+      lines.push(`# ${BUDGET_DOC_URL}`);
+    }
+  }
+  return lines.length > 0 ? `${lines.join("\n")}\n` : undefined;
 }
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf";
@@ -297,6 +340,13 @@ function buildCost(
   model: FriendliModel,
   existing: ExistingModel["cost"] | undefined,
 ): NonNullable<ExistingModel["cost"]> | undefined {
+  // TOKEN-priced per-token USD rates are converted to USD/MTok. Any other
+  // unit (e.g. SECOND) is not a token rate: do not author a cost section
+  // for it instead of publishing an invented per-million price, mirroring
+  // the pre-SyncProvider generator's behavior.
+  if (model.pricing.unit_type !== undefined && model.pricing.unit_type !== "TOKEN") {
+    return existing;
+  }
   const input = perMillion(model.pricing.input);
   const output = perMillion(model.pricing.output);
   if (input === undefined || output === undefined) return existing;

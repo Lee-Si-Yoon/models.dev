@@ -1,7 +1,9 @@
-# Context and output hard ceiling: official Hugging Face config
-# max_position_embeddings = 262_144. The lab does not publish a lower hard
-# maximum-generation ceiling; do not misrepresent the README's example
-# max_new_tokens value as one.
+# Context: official Hugging Face config max_position_embeddings = 262,144.
+# The lab publishes no separate hard maximum-generation ceiling (the README
+# uses max_new_tokens=16,384 only as a quickstart generation default, and the
+# Technical Report documents the 256K context window, not an output cap), so
+# limit.output is intentionally omitted rather than inventing one here.
+# Providers serving this model author their own host-verified output cap.
 # https://huggingface.co/LGAI-EXAONE/K-EXAONE-236B-A23B/raw/main/config.json
 name = "K-EXAONE-236B-A23B"
 description = "Open multilingual MoE model for reasoning, agentic tool use, and long-context work with strong Korean capabilities"
@@ -16,7 +18,6 @@ open_weights = true
 
 [limit]
 context = 262_144
-output = 262_144
 
 [modalities]
 input = ["text"]
