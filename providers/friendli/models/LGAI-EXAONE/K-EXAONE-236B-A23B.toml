@@ -1,11 +1,13 @@
 # Toggle: chat_template_kwargs.enable_thinking = true | false
 # https://friendli.ai/docs/guides/reasoning
 #
-# Host completion cap (not a lab fact): this Friendli route reports
-# max_completion_tokens = 262,144 in its serving catalog, so it is recorded
-# here rather than inheriting the lab entry, which deliberately omits an
-# output ceiling (LG publishes none). Verified live (accessed 2026-08-29):
-# https://api.friendli.ai/serverless/v1/models
+# Deprecated route: deprecation_date 2026-08-20 passed; the live catalog no
+# longer lists this model and POST /chat/completions now returns HTTP 404
+# (verified live 2026-08-29). Retained for history via deleteMissing: false.
+# Override-only: cost, reasoning options, and lifecycle come from this host;
+# limits inherit wholesale from models/lgai-exaone/k-exaone-236b-a23b.toml
+# (LG config max_position_embeddings = 262,144), with no serving-field
+# completion claim on this dead route.
 base_model = "lgai-exaone/k-exaone-236b-a23b"
 status = "deprecated"
 
@@ -19,7 +21,3 @@ type = "toggle"
 input = 0.2
 output = 0.8
 cache_read = 0.1
-
-[limit]
-context = 262_144
-output = 262_144
