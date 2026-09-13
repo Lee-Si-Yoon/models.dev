@@ -276,6 +276,8 @@ export const friendli = {
 const REASONING_GUIDE_URL = "https://friendli.ai/docs/guides/reasoning";
 const EFFORT_DOC_URL =
   "https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-effort-one-of-0";
+const BUDGET_DOC_URL =
+  "https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-budget-one-of-0";
 
 function reasoningHeader(model: SyncedModel): string | undefined {
   const options = model.reasoning_options;
@@ -294,6 +296,12 @@ function reasoningHeader(model: SyncedModel): string | undefined {
         lines.push("# Effort: reasoning_effort (model-specific accepted values)");
       }
       lines.push(`# ${EFFORT_DOC_URL}`);
+    }
+    if (option.type === "budget_tokens") {
+      lines.push(
+        "# Budget: reasoning_budget = positive integer reasoning-token cap (-1 = unlimited)",
+      );
+      lines.push(`# ${BUDGET_DOC_URL}`);
     }
   }
   return lines.length > 0 ? `${lines.join("\n")}\n` : undefined;
@@ -356,14 +364,17 @@ function buildCost(
 }
 
 // Translate API reasoning_options into host-accurate catalog options.
-// budget_tokens is deliberately dropped: although reasoning_budget is a real,
-// independently enforced Friendli control (live-verified on GLM-5.3,
-// gemma-4-31B-it, DeepSeek-V3.2, and MiniMax-M2.5), the catalog only
-// publishes toggle/effort controls for OpenAI-compatible hosts, and a
-// budget-only reasoner (MiniMax-M2.5) is always-on — an empty option list
-// matches the repo's established convention for always-on reasoners. The
-// raw zod schema above still parses budget_tokens so the shape is validated,
-// but it is never carried into the synced model.
+// budget_tokens is kept as an unbounded `{ type = "budget_tokens" }`:
+// reasoning_budget is a real, independently enforced Friendli control
+// (live-verified on GLM-5.3, gemma-4-31B-it, DeepSeek-V3.2, and
+// MiniMax-M2.5 — small budgets truncate reasoning_content mid-sentence while
+// completion continues), and peers such as OpenRouter/Requesty publish it
+// when the host supports it. The catalog's min/max values are not safe
+// published range constraints — GLM-5.3 accepted reasoning_budget=1_048_577
+// despite reporting max=1_048_576 — so the capability is preserved without
+// authoring bounds. A budget-only reasoner (MiniMax-M2.5) therefore publishes
+// `[{ type = "budget_tokens" }]`, not []: [] would falsely claim no caller
+// control on a host that documents reasoning_budget.
 function translateReasoningOptions(
   api: FriendliModel["reasoning_options"],
 ): SyncedFullModel["reasoning_options"] {
@@ -371,7 +382,10 @@ function translateReasoningOptions(
   const options: NonNullable<SyncedFullModel["reasoning_options"]> = [];
   for (const option of api) {
     if (option === undefined) continue;
-    if (option.type === "budget_tokens") continue;
+    if (option.type === "budget_tokens") {
+      options.push({ type: "budget_tokens" });
+      continue;
+    }
     options.push(option as NonNullable<SyncedFullModel["reasoning_options"]>[number]);
   }
   return options.length > 0 ? options : [];
