@@ -368,11 +368,15 @@ function buildCost(
 // budget_tokens IS a real reasoning-budget control on Friendli, confirmed by
 // the live /v1/models response and the OpenAPI chat-completions docs
 // (reasoning_budget is a documented request field, min = -1 means unlimited).
-// The control itself is real (verified with live requests across GLM-5.3,
-// gemma-4-31B-it, and DeepSeek-V3.2), but the catalog's min/max values are
-// not safe published range constraints: GLM-5.3 accepted
-// reasoning_budget=1_048_577 despite reporting max=1_048_576. Preserve the
-// capability without publishing unverified bounds — never author min/max.
+// The control is verified with live requests on GLM-5.3, gemma-4-31B-it,
+// DeepSeek-V3.2, and MiniMax-M2.5 (2026-09-13: MiniMax reasoning_budget=10
+// truncated reasoning_content at 46 chars while completion_tokens continued
+// to a full answer; budget=2000 produced 1011 chars of reasoning under the
+// same prompt and max_tokens — the two phases cap independently). The
+// catalog's min/max values are not safe published range constraints:
+// GLM-5.3 accepted reasoning_budget=1_048_577 despite reporting
+// max=1_048_576. Preserve the capability without publishing unverified
+// bounds — never author min/max.
 function translateReasoningOptions(
   api: FriendliModel["reasoning_options"],
 ): SyncedFullModel["reasoning_options"] {
@@ -468,8 +472,12 @@ function buildFriendliModel(
     input: existing?.limit?.input,
     output: factorBase !== undefined ? undefined : model.max_completion_tokens,
   };
-  const reasoning = model.reasoning === true;
-  const reasoningOptions = reasoning ? translateReasoningOptions(model.reasoning_options) : undefined;
+  // Reasoning is tri-state: Friendli omits the flag for some reasoners, and
+  // treating "absent" as `false` would publish an explicit reasoning=false
+  // override on factored entries and strip their reasoning_options. Only
+  // override when the API is authoritative; otherwise the lab wins.
+  const reasoning = model.reasoning === true ? true : model.reasoning === false ? false : undefined;
+  const reasoningOptions = reasoning === false ? undefined : translateReasoningOptions(model.reasoning_options);
   const interleaved = translateInterleaved(model.id, model.interleaved, existing?.interleaved);
   const structuredOutput = model.functionality.structured_output;
   const cost = buildCost(model, existing?.cost);
@@ -485,6 +493,9 @@ function buildFriendliModel(
         reasoning,
         reasoning_options: reasoningOptions,
         interleaved,
+        // Friendli is authoritative for this host's tool-call surface; a
+        // real delta vs the lab (either direction) must be published.
+        tool_call: model.functionality.tool_call,
         structured_output: structuredOutput,
         // A factored entry inherits the lab description. Friendli's catalog
         // description is host metadata, not a new model identity, and its
@@ -502,6 +513,10 @@ function buildFriendliModel(
   }
 
   const name = existing?.name ?? (model.name.split("/").at(-1) ?? model.name);
+  // Full-inline has no lab to inherit from: a reasoning flag the API omits
+  // defaults to false here (describeModel needs a boolean), while factored
+  // entries above leave it unset so the lab's value stands.
+  const inlineReasoning = reasoning ?? false;
   return {
     name,
     description:
@@ -512,7 +527,7 @@ function buildFriendliModel(
         providerId: "friendli",
         name,
         family: existing?.family,
-        reasoning,
+        reasoning: inlineReasoning,
         tool_call: model.functionality.tool_call,
         structured_output: structuredOutput,
         open_weights: Boolean(model.hugging_face_url),
@@ -525,7 +540,7 @@ function buildFriendliModel(
     // Full-inline has no lab to inherit from; default text-only when the API
     // omits modalities. Earlier `attachment` is undefined in that case.
     attachment: attachment ?? false,
-    reasoning,
+    reasoning: inlineReasoning,
     reasoning_options: reasoningOptions,
     tool_call: model.functionality.tool_call,
     structured_output: structuredOutput,
