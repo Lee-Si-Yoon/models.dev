@@ -194,9 +194,12 @@ export const friendli = {
   id: "friendli",
   name: "Friendli",
   modelsDir: "providers/friendli/models",
-  // Friendli occasionally rotates models in and out of its catalog; retain
-  // local files for entries the API no longer advertises instead of deleting.
-  deleteMissing: false,
+  // Friendli's /v1/models is authoritative for what this host serves: a model
+  // absent from the catalog (or past its deprecation_date) must not stay in
+  // the catalog as a live-looking route, so missing files are deleted rather
+  // than retained. Deprecation marking below only applies while the model is
+  // still listed; once it disappears, the file goes with it.
+  deleteMissing: true,
   // Friendli's catalog describes real reasoning controls and limits directly;
   // do not carry over a stale base_model when a model switches lab → full inline.
   preserveBaseModels: false,
@@ -223,12 +226,12 @@ export const friendli = {
   },
   translateModel(model: FriendliModel, context) {
     const existing = context.existing(model.id);
-    // Mirror the deepinfra pattern: a brand-new deprecated model is skipped
-    // outright (nothing to author), but a model we already track keeps its
-    // file and gets marked `status = "deprecated"` instead of silently
-    // falling out of translateModel — that left it retained via
-    // deleteMissing but stuck live in the catalog with no lifecycle marker.
-    if (isDeprecated(model) && existing === undefined) return undefined;
+    // A model past its deprecation_date is skipped outright (tracked or not):
+    // with deleteMissing enabled, skipping removes an already-tracked file on
+    // the next sync, so the catalog never keeps serving a dead route as a
+    // live-looking entry. Source-of-truth policy: a deprecation_date in the
+    // catalog means the same thing as the model disappearing from it.
+    if (isDeprecated(model)) return undefined;
     const factorBase = resolveLabModelSync(model);
     // Friendli is a multi-lab relay, so a brand-new remote model with no
     // provider-agnostic lab metadata to factor onto must not be authored
@@ -242,7 +245,6 @@ export const friendli = {
       model,
       existing,
       factorBase,
-      isDeprecated(model),
     );
     return {
       id: model.id,
@@ -256,29 +258,24 @@ export const friendli = {
   skippedNotice(ids: string[]) {
     if (ids.length === 0) return [];
     return [
-      `${ids.length} remote model(s) skipped: no provider-agnostic lab metadata to factor onto (full-inline creates are not authored for a multi-lab relay — add models/<lab>/<model>.toml, then re-sync) or deprecation_date passed before the model was ever tracked: ${ids.join(", ")}`,
+      `${ids.length} remote model(s) skipped: no provider-agnostic lab metadata to factor onto (full-inline creates are not authored for a multi-lab relay — add models/<lab>/<model>.toml, then re-sync) or deprecation_date passed: ${ids.join(", ")}`,
     ];
   },
   missingNotice(paths: string[]) {
     if (paths.length === 0) return [];
     return [
-      `${paths.length} local model(s) retained after being removed from the Friendli API: ${paths.join(", ")}`,
+      `${paths.length} local model(s) deleted after being removed from the Friendli API (or past their deprecation_date): ${paths.join(", ")}`,
     ];
   },
 } satisfies SyncProvider<FriendliModel>;
 
 // Leading wire-path comments for every reasoning control type this host
 // authors on a file, matching the wire paths documented in
-// providers/friendli/provider.toml. A comment per authored control type
-// (toggle, effort, budget) keeps the rationale attached even for budget-only
-// files such as MiniMax-M2.5 — a toggle-only header would lose it. With
-// authoritativeHeaders enabled, this header always replaces whatever was on
-// disk, so it never goes stale.
+// providers/friendli/provider.toml. With authoritativeHeaders enabled, this
+// header always replaces whatever was on disk, so it never goes stale.
 const REASONING_GUIDE_URL = "https://friendli.ai/docs/guides/reasoning";
 const EFFORT_DOC_URL =
   "https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-effort-one-of-0";
-const BUDGET_DOC_URL =
-  "https://friendli.ai/docs/openapi/model-apis/chat-completions#body-reasoning-budget-one-of-0";
 
 function reasoningHeader(model: SyncedModel): string | undefined {
   const options = model.reasoning_options;
@@ -297,12 +294,6 @@ function reasoningHeader(model: SyncedModel): string | undefined {
         lines.push("# Effort: reasoning_effort (model-specific accepted values)");
       }
       lines.push(`# ${EFFORT_DOC_URL}`);
-    }
-    if (option.type === "budget_tokens") {
-      lines.push(
-        "# Budget: reasoning_budget = positive integer reasoning-token cap (-1 = unlimited)",
-      );
-      lines.push(`# ${BUDGET_DOC_URL}`);
     }
   }
   return lines.length > 0 ? `${lines.join("\n")}\n` : undefined;
@@ -365,18 +356,14 @@ function buildCost(
 }
 
 // Translate API reasoning_options into host-accurate catalog options.
-// budget_tokens IS a real reasoning-budget control on Friendli, confirmed by
-// the live /v1/models response and the OpenAPI chat-completions docs
-// (reasoning_budget is a documented request field, min = -1 means unlimited).
-// The control is verified with live requests on GLM-5.3, gemma-4-31B-it,
-// DeepSeek-V3.2, and MiniMax-M2.5 (2026-09-13: MiniMax reasoning_budget=10
-// truncated reasoning_content at 46 chars while completion_tokens continued
-// to a full answer; budget=2000 produced 1011 chars of reasoning under the
-// same prompt and max_tokens — the two phases cap independently). The
-// catalog's min/max values are not safe published range constraints:
-// GLM-5.3 accepted reasoning_budget=1_048_577 despite reporting
-// max=1_048_576. Preserve the capability without publishing unverified
-// bounds — never author min/max.
+// budget_tokens is deliberately dropped: although reasoning_budget is a real,
+// independently enforced Friendli control (live-verified on GLM-5.3,
+// gemma-4-31B-it, DeepSeek-V3.2, and MiniMax-M2.5), the catalog only
+// publishes toggle/effort controls for OpenAI-compatible hosts, and a
+// budget-only reasoner (MiniMax-M2.5) is always-on — an empty option list
+// matches the repo's established convention for always-on reasoners. The
+// raw zod schema above still parses budget_tokens so the shape is validated,
+// but it is never carried into the synced model.
 function translateReasoningOptions(
   api: FriendliModel["reasoning_options"],
 ): SyncedFullModel["reasoning_options"] {
@@ -384,10 +371,7 @@ function translateReasoningOptions(
   const options: NonNullable<SyncedFullModel["reasoning_options"]> = [];
   for (const option of api) {
     if (option === undefined) continue;
-    if (option.type === "budget_tokens") {
-      options.push({ type: "budget_tokens" });
-      continue;
-    }
+    if (option.type === "budget_tokens") continue;
     options.push(option as NonNullable<SyncedFullModel["reasoning_options"]>[number]);
   }
   return options.length > 0 ? options : [];
@@ -428,18 +412,11 @@ function buildFriendliModel(
   model: FriendliModel,
   existing: ExistingModel | undefined,
   factorBase: string | undefined,
-  deprecated: boolean,
 ): SyncedModel {
-  // Mirror deepinfra/pioneer lifecycle behavior: mark a live-catalog model
-  // deprecated when its deprecation_date has passed, but do not let a retained
-  // deleteMissing:false file stay permanently deprecated if it later returns
-  // to the catalog active again. Preserve other hand-authored lifecycle
-  // statuses (e.g. beta) unchanged.
-  const status = deprecated
-    ? "deprecated" as const
-    : existing?.status === "deprecated"
-      ? undefined
-      : existing?.status;
+  // translateModel already skips models past their deprecation_date, so every
+  // model reaching this point is live. Carry hand-authored lifecycle statuses
+  // (e.g. beta) through unchanged.
+  const status = existing?.status;
 
   // Only override modalities when the API explicitly provides them; otherwise
   // omit the override so lab metadata (e.g. gemma vision) is inherited.
