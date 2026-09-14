@@ -222,10 +222,15 @@ export const friendli = {
     return response.json();
   },
   parseModels(raw: unknown) {
-    return FriendliResponse.parse(raw).data;
+    const models = FriendliResponse.parse(raw).data;
+    if (models.length === 0) {
+      throw new Error("Friendli returned an empty model catalog; refusing destructive sync");
+    }
+    return models;
   },
   translateModel(model: FriendliModel, context) {
     const existing = context.existing(model.id);
+    const authored = context.authored(model.id);
     // A model past its deprecation_date is skipped outright (tracked or not):
     // with deleteMissing enabled, skipping removes an already-tracked file on
     // the next sync, so the catalog never keeps serving a dead route as a
@@ -233,14 +238,15 @@ export const friendli = {
     // catalog means the same thing as the model disappearing from it.
     if (isDeprecated(model)) return undefined;
     const factorBase = resolveLabModelSync(model);
-    // Friendli is a multi-lab relay, so a brand-new remote model with no
-    // provider-agnostic lab metadata to factor onto must not be authored
-    // full-inline by an hourly sync (AGENTS.md: full inline is reserved for
-    // first-party labs or true host-unique aliases). Mirror the deepinfra
-    // create gate: already-tracked files keep updating; unresolvable new
-    // IDs are skipped with a notice until lab metadata exists or a true
-    // host-unique alias is hand-authored.
-    if (existing === undefined && factorBase === undefined) return undefined;
+    // Friendli is a multi-lab relay, so models that need a canonical lab entry
+    // are handled by the missing-model issue flow. If an existing factored
+    // entry becomes temporarily unresolvable, skip it as well: the runner
+    // preserves its TOML rather than expanding or deleting it. Existing true
+    // host-unique full-inline entries can still update normally.
+    if (
+      factorBase === undefined
+      && (existing === undefined || authored?.base_model !== undefined)
+    ) return undefined;
     const built = buildFriendliModel(
       model,
       existing,

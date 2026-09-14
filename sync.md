@@ -46,7 +46,7 @@ Sync runs also write `.sync/model-sync-report.md` for the automation workflow PR
 - Removes existing files that are no longer present in the desired synced set.
 - Writes `.sync/model-sync-report.md` for GitHub Actions.
 - When `skipCreates` is set and issue opens are enabled, opens one deduped GitHub issue per remote model missing from the local catalog (via `gh`).
-- When a provider selectively skips only some new models, `missingModelID` can mark those skips for the same deduped issue flow without disabling safe automatic creates.
+- When a provider selectively skips only some models, `missingModelID` can preserve existing metadata and mark those skips for the same deduped issue flow without disabling safe automatic creates.
 
 Because the runner removes files missing from the desired set, a provider module should only skip source models when deleting existing local files for those skipped IDs is intentional.
 
@@ -60,7 +60,7 @@ Providers that cannot safely auto-create TOMLs set `skipCreates: true`. In GitHu
 4. Dispatches the Issue Fixer explicitly so issues created with `GITHUB_TOKEN` can still produce PRs
 5. If listing fails, creates nothing (fail closed)
 
-Providers that can auto-create most models may instead return an ID from `missingModelID` only for `translateModel` skips that need manual metadata. Intentional skips return `undefined` and do not open issues.
+Providers that can auto-create most models may instead return an ID from `missingModelID` only for `translateModel` skips that need manual metadata. The runner preserves an existing local entry for that ID while the issue is handled. Intentional skips return `undefined` and do not open issues.
 
 Requires `GH_TOKEN` on the sync workflow step. Local runs are notice-only unless `--open-issues`. Use `--no-issues` / `--dry-run` to skip creates. Each newly opened issue explicitly dispatches the issue-fixer workflow so an agent can research the missing metadata and open a model PR.
 

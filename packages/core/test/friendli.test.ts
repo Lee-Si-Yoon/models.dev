@@ -22,6 +22,17 @@ test("tracks active Friendli models missing lab metadata", () => {
   expect(friendli.missingModelID(model)).toBe(model.id);
 });
 
+test("rejects an empty Friendli catalog", () => {
+  expect(() => friendli.parseModels({ data: [] })).toThrow("empty model catalog");
+});
+
+test("skips a factored model when its lab metadata cannot be resolved", () => {
+  expect(friendli.translateModel(model, {
+    existing: () => ({ base_model: "example/missing" }),
+    authored: () => ({ base_model: "example/missing" }),
+  })).toBeUndefined();
+});
+
 test("does not track deprecated Friendli models as missing", () => {
   expect(friendli.missingModelID({
     ...model,

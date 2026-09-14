@@ -99,7 +99,8 @@ export interface SyncProvider<SourceModel> {
   sourceID?(model: SourceModel): string | undefined;
   /**
    * Return the ID when a source model skipped by translateModel needs a
-   * missing-model issue. Return undefined for intentional skips.
+   * missing-model issue. Existing local metadata for that ID is preserved.
+   * Return undefined for intentional skips.
    */
   missingModelID?(model: SourceModel): string | undefined;
   skippedNotice?(ids: string[]): string[];
@@ -263,7 +264,7 @@ export async function syncProvider<SourceModel>(
   const caseNormalizedDesiredPaths = new Map<string, string>();
   const desiredMetadata = new Map<string, { model: z.infer<typeof ModelMetadata>; content: string }>();
   const skippedRemote: string[] = [];
-  const missingRemote: string[] = [];
+  const missingRemote = new Set<string>();
   const missingReasoning = new Map<string, string>();
 
   for (const sourceModel of sourceModels) {
@@ -287,7 +288,7 @@ export async function syncProvider<SourceModel>(
       const skippedID = provider.sourceID?.(sourceModel);
       if (skippedID !== undefined) skippedRemote.push(skippedID);
       const missingID = provider.missingModelID?.(sourceModel);
-      if (missingID !== undefined) missingRemote.push(missingID);
+      if (missingID !== undefined) missingRemote.add(missingID);
       continue;
     }
 
@@ -467,6 +468,10 @@ export async function syncProvider<SourceModel>(
   const missingLocal: string[] = [];
   for (const relativePath of new Set([...existing.keys(), ...brokenSymlinks])) {
     if (desired.has(relativePath)) continue;
+    if (missingRemote.has(relativePath.slice(0, -5))) {
+      unchanged++;
+      continue;
+    }
     if (missingReasoning.has(relativePath.slice(0, -5))) {
       unchanged++;
       continue;
@@ -499,7 +504,7 @@ export async function syncProvider<SourceModel>(
   ];
 
   const issueModels = [...new Set([
-    ...missingRemote,
+    ...missingRemote.values(),
     ...(provider.skipCreates === true ? skippedRemote : []),
     ...missingReasoning.keys(),
   ])];
