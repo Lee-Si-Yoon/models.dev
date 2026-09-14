@@ -255,6 +255,11 @@ export const friendli = {
   sourceID(model: FriendliModel) {
     return model.id;
   },
+  missingModelID(model: FriendliModel) {
+    // Active models only reach the skip path when their provider-agnostic lab
+    // metadata is missing. Deprecated models are intentional removals.
+    return isDeprecated(model) ? undefined : model.id;
+  },
   skippedNotice(ids: string[]) {
     if (ids.length === 0) return [];
     return [

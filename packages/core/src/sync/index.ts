@@ -97,6 +97,11 @@ export interface SyncProvider<SourceModel> {
    * undefined to skip silently (no notice, no missing-model issue).
    */
   sourceID?(model: SourceModel): string | undefined;
+  /**
+   * Return the ID when a source model skipped by translateModel needs a
+   * missing-model issue. Return undefined for intentional skips.
+   */
+  missingModelID?(model: SourceModel): string | undefined;
   skippedNotice?(ids: string[]): string[];
   fetchModels(): Promise<unknown>;
   parseModels(raw: unknown): SourceModel[];
@@ -258,6 +263,7 @@ export async function syncProvider<SourceModel>(
   const caseNormalizedDesiredPaths = new Map<string, string>();
   const desiredMetadata = new Map<string, { model: z.infer<typeof ModelMetadata>; content: string }>();
   const skippedRemote: string[] = [];
+  const missingRemote: string[] = [];
   const missingReasoning = new Map<string, string>();
 
   for (const sourceModel of sourceModels) {
@@ -280,6 +286,8 @@ export async function syncProvider<SourceModel>(
     if (translated === undefined) {
       const skippedID = provider.sourceID?.(sourceModel);
       if (skippedID !== undefined) skippedRemote.push(skippedID);
+      const missingID = provider.missingModelID?.(sourceModel);
+      if (missingID !== undefined) missingRemote.push(missingID);
       continue;
     }
 
@@ -490,10 +498,11 @@ export async function syncProvider<SourceModel>(
     ...provider.missingNotice?.(missingLocal) ?? [],
   ];
 
-  const issueModels = [
+  const issueModels = [...new Set([
+    ...missingRemote,
     ...(provider.skipCreates === true ? skippedRemote : []),
     ...missingReasoning.keys(),
-  ];
+  ])];
   if (
     provider.trackMissingModels !== false
     && issueModels.length > 0
